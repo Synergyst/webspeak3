@@ -247,6 +247,7 @@ const DESIGN_THEME_KEY = "webspeak3:design-theme";
 const DESIGN_SELECTION_KEY = "webspeak3:design-selection";
 const CUSTOM_THEMES_KEY = "webspeak3:custom-themes";
 const REGENERATE_IDENTITY_KEY = "webspeak3:regenerate-identity";
+const RANDOM_HARDWARE_ID_KEY = "webspeak3:randomize-hardware-id";
 
 
 type DesignTheme = "standard" | "nova" | "greenteaspeak" | "pulse";
@@ -5110,9 +5111,13 @@ function AufnahmePanel({ audio }: { audio: AudioSettings }) {
 function AnwendungPanel({
   regenerateIdentity,
   onRegenerateIdentityChange,
+  randomizeHardwareId,
+  onRandomizeHardwareIdChange,
 }: {
   regenerateIdentity: boolean;
   onRegenerateIdentityChange: (v: boolean) => void;
+  randomizeHardwareId: boolean;
+  onRandomizeHardwareIdChange: (v: boolean) => void;
 }) {
   const t = useT();
   const { langPref, setLangPref } = useLanguage();
@@ -5138,6 +5143,14 @@ function AnwendungPanel({
         />
         {t("app.regenerateIdentity")}
       </label>
+      <label className="ts-options-checkbox">
+        <input
+          type="checkbox"
+          checked={randomizeHardwareId}
+          onChange={(e) => onRandomizeHardwareIdChange(e.target.checked)}
+        />
+        {t("app.randomizeHardwareId")}
+      </label>
       <p className="ts-options-hint">
         <a href="https://hosted.weblate.org/projects/webspeak3/" target="_blank" rel="noreferrer">
           {t("app.language.helpTranslate")}
@@ -5161,6 +5174,10 @@ function DesignPanel({
   customThemes: CustomTheme[];
   onSaveCustomTheme: (theme: CustomTheme) => void;
   onDeleteCustomTheme: (id: string) => void;
+  regenerateIdentity: boolean;
+  onRegenerateIdentityChange: (v: boolean) => void;
+  randomizeHardwareId: boolean;
+  onRandomizeHardwareIdChange: (v: boolean) => void;
 }) {
   const t = useT();
   const [editing, setEditing] = useState<CustomThemeDraft | null>(null);
@@ -5613,6 +5630,8 @@ function OptionsDialog({
   onDeleteCustomTheme,
   regenerateIdentity,
   onRegenerateIdentityChange,
+  randomizeHardwareId,
+  onRandomizeHardwareIdChange,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
@@ -5625,6 +5644,8 @@ function OptionsDialog({
   onDeleteCustomTheme: (id: string) => void;
   regenerateIdentity: boolean;
   onRegenerateIdentityChange: (v: boolean) => void;
+  randomizeHardwareId: boolean;
+  onRandomizeHardwareIdChange: (v: boolean) => void;
 }) {  const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
   const backdrop = useBackdropDismiss(onClose);
@@ -5655,6 +5676,8 @@ function OptionsDialog({
               <AnwendungPanel 
                 regenerateIdentity={regenerateIdentity} 
                 onRegenerateIdentityChange={onRegenerateIdentityChange} 
+                randomizeHardwareId={randomizeHardwareId}
+                onRandomizeHardwareIdChange={onRandomizeHardwareIdChange}
               />
             ) : active.id === "wiedergabe" ? (
               <WiedergabePanel audio={audio} />
@@ -6217,6 +6240,7 @@ function AppInner() {
     setLogEntries((prev) => [...prev.slice(-(MAX_LOG_ENTRIES - 1)), entry]);
   };
   const [regenerateIdentity, setRegenerateIdentity] = useState(() => loadBoolPref(REGENERATE_IDENTITY_KEY, false));
+  const [randomizeHardwareId, setRandomizeHardwareId] = useState(() => loadBoolPref(RANDOM_HARDWARE_ID_KEY, false));
   const [optionsDialogOpen, setOptionsDialogOpen] = useState(false);
   const [optionsSection, setOptionsSection] = useState<string>(OPTIONS_SECTIONS[0].id);
   const socketRef = useRef<WebSocket | DemoSocket | null>(null);
@@ -9903,6 +9927,16 @@ function AppInner() {
                 onRegenerateIdentityChange={(v) => {
                   setRegenerateIdentity(v);
                   localStorage.setItem("webspeak3:regenerate-identity", v ? "1" : "0");
+                }}
+                regenerateIdentity={regenerateIdentity}
+                onRegenerateIdentityChange={(v) => {
+                  setRegenerateIdentity(v);
+                  localStorage.setItem("webspeak3:regenerate-identity", v ? "1" : "0");
+                }}
+                randomizeHardwareId={randomizeHardwareId}
+                onRandomizeHardwareIdChange={(v) => {
+                  setRandomizeHardwareId(v);
+                  localStorage.setItem("webspeak3:randomize-hardware-id", v ? "1" : "0");
                 }} />
       )}
 
