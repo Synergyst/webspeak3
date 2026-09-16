@@ -12,10 +12,10 @@ services:
     # instead of letting an override change it. Set it in a local, gitignored
     # docker-compose.override.yml:
     #
-    # services:
-    #   webspeak3:
-    #     ports:
-    #       - "8080:8080"
+    #services:
+    #  webspeak3:
+    #    ports:
+    #      - "8080:8080"
 
   cloudflared:
     image: cloudflare/cloudflared:latest

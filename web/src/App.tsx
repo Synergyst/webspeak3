@@ -246,6 +246,8 @@ const DESIGN_THEME_KEY = "webspeak3:design-theme";
 // before customThemes is loaded.
 const DESIGN_SELECTION_KEY = "webspeak3:design-selection";
 const CUSTOM_THEMES_KEY = "webspeak3:custom-themes";
+const REGENERATE_IDENTITY_KEY = "webspeak3:regenerate-identity";
+
 
 type DesignTheme = "standard" | "nova" | "greenteaspeak" | "pulse";
 
@@ -5105,7 +5107,13 @@ function AufnahmePanel({ audio }: { audio: AudioSettings }) {
   );
 }
 
-function AnwendungPanel() {
+function AnwendungPanel({
+  regenerateIdentity,
+  onRegenerateIdentityChange,
+}: {
+  regenerateIdentity: boolean;
+  onRegenerateIdentityChange: (v: boolean) => void;
+}) {
   const t = useT();
   const { langPref, setLangPref } = useLanguage();
   return (
@@ -5121,6 +5129,14 @@ function AnwendungPanel() {
           <option value="zh-CN">{t("app.language.zh-CN")}</option>
           <option value="fa">{t("app.language.fa")}</option>
         </select>
+      </label>
+      <label className="ts-options-checkbox">
+        <input
+          type="checkbox"
+          checked={regenerateIdentity}
+          onChange={(e) => onRegenerateIdentityChange(e.target.checked)}
+        />
+        {t("app.regenerateIdentity")}
       </label>
       <p className="ts-options-hint">
         <a href="https://hosted.weblate.org/projects/webspeak3/" target="_blank" rel="noreferrer">
@@ -5595,6 +5611,8 @@ function OptionsDialog({
   customThemes,
   onSaveCustomTheme,
   onDeleteCustomTheme,
+  regenerateIdentity,
+  onRegenerateIdentityChange,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
@@ -5605,8 +5623,9 @@ function OptionsDialog({
   customThemes: CustomTheme[];
   onSaveCustomTheme: (theme: CustomTheme) => void;
   onDeleteCustomTheme: (id: string) => void;
-}) {
-  const t = useT();
+  regenerateIdentity: boolean;
+  onRegenerateIdentityChange: (v: boolean) => void;
+}) {  const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
   const backdrop = useBackdropDismiss(onClose);
   return (
@@ -5633,7 +5652,10 @@ function OptionsDialog({
           </div>
           <div className="ts-options-content">
             {active.id === "anwendung" ? (
-              <AnwendungPanel />
+              <AnwendungPanel 
+                regenerateIdentity={regenerateIdentity} 
+                onRegenerateIdentityChange={onRegenerateIdentityChange} 
+              />
             ) : active.id === "wiedergabe" ? (
               <WiedergabePanel audio={audio} />
             ) : active.id === "aufnahme" ? (
@@ -6194,6 +6216,7 @@ function AppInner() {
     const entry: ClientLogEntry = { id: ++logIdRef.current, timestamp: Date.now(), category, level, message };
     setLogEntries((prev) => [...prev.slice(-(MAX_LOG_ENTRIES - 1)), entry]);
   };
+  const [regenerateIdentity, setRegenerateIdentity] = useState(() => loadBoolPref(REGENERATE_IDENTITY_KEY, false));
   const [optionsDialogOpen, setOptionsDialogOpen] = useState(false);
   const [optionsSection, setOptionsSection] = useState<string>(OPTIONS_SECTIONS[0].id);
   const socketRef = useRef<WebSocket | DemoSocket | null>(null);
@@ -6659,7 +6682,7 @@ function AppInner() {
   // session — active or parked in the background — getting a fresh socket
   // after an unexpected drop), so a reconnect behaves identically to the
   // original connect from the gateway/UI's point of view.
-  const wireSocket = (sessionId: string, socket: WebSocket | DemoSocket, params: ConnectParams) => {
+  const wireSocket = (sessionId: string, socket: WebSocket | DemoSocket, params: ConnectParams, regenerateIdentity: boolean) => {
     const connectHost = params.host;
     const connectNickname = params.nickname;
     const connectServerPassword = params.serverPassword;
@@ -6669,7 +6692,7 @@ function AppInner() {
     const connectServerType = params.serverType;
     const connectIdentityId = params.identityId;
     const connectFavoriteId = params.favoriteId;
-    const connectIdentityBlob = identities.find((i) => i.id === connectIdentityId)?.blob ?? undefined;
+    const connectIdentityBlob = (regenerateIdentity && connectIdentityId) ? undefined : identities.find((i) => i.id === connectIdentityId)?.blob ?? undefined;
 
     socket.onopen = () => {
       logClient("info", "Connection", `Connecting to ${connectHost}…`);
@@ -7188,7 +7211,7 @@ function AppInner() {
       { id: sessionId, label: params.host || "…", connected: false, connecting: true },
     ]);
 
-    wireSocket(sessionId, socket, params);
+    wireSocket(sessionId, socket, params, regenerateIdentity);
   };
 
   // Opens a fresh socket for a session that already exists (active or
@@ -7217,7 +7240,7 @@ function AppInner() {
       rec.parked = { ...rec.parked, connecting: true, connected: false, connectError: null };
     }
     updateTabMeta(sessionId, { connecting: true, connected: false });
-    wireSocket(sessionId, socket, params);
+    wireSocket(sessionId, socket, params, regenerateIdentity);
   };
 
   const reconnectSessionRef = useRef(reconnectSession);
@@ -9875,7 +9898,12 @@ function AppInner() {
             autoGainControlEnabled,
             onToggleAutoGainControl: handleToggleAutoGainControl,
           }}
-        />
+       
+                regenerateIdentity={regenerateIdentity}
+                onRegenerateIdentityChange={(v) => {
+                  setRegenerateIdentity(v);
+                  localStorage.setItem("webspeak3:regenerate-identity", v ? "1" : "0");
+                }} />
       )}
 
       {connectError && (
