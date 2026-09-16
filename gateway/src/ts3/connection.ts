@@ -223,6 +223,7 @@ export interface Ts3ConnectOptions {
   serverType?: ServerType;
   /** One-time privilege key / token to redeem on connect. */
   privilegeKey?: string;
+  randomizeHardwareId?: boolean;
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -256,6 +257,7 @@ export class Ts3Connection {
     if (this.options.identity) args.push("--identity", this.options.identity);
     if (this.options.serverType) args.push("--server-type", this.options.serverType);
     if (this.options.privilegeKey) args.push("--privilege-key", this.options.privilegeKey);
+    if (this.options.randomizeHardwareId) args.push("--randomize-hwid");
     this.child = spawn(CONNECTOR_BIN, args);
 
     createInterface({ input: this.child.stdout }).on("line", (line) => {

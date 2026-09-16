@@ -539,6 +539,7 @@ wss.on("connection", (socket: WebSocket) => {
           identity: msg.identity,
           serverType: parseServerType(msg.serverType),
           privilegeKey: parsePrivilegeKey(msg),
+          randomizeHardwareId: msg.randomizeHardwareId,
         };
         connection = new Ts3Connection(options);
         liveConnections.add(connection);

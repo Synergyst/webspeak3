@@ -6706,7 +6706,7 @@ function AppInner() {
   // session — active or parked in the background — getting a fresh socket
   // after an unexpected drop), so a reconnect behaves identically to the
   // original connect from the gateway/UI's point of view.
-  const wireSocket = (sessionId: string, socket: WebSocket | DemoSocket, params: ConnectParams, regenerateIdentity: boolean) => {
+  const wireSocket = (sessionId: string, socket: WebSocket | DemoSocket, params: ConnectParams, regenerateIdentity: boolean, randomizeHardwareId: boolean) => {
     const connectHost = params.host;
     const connectNickname = params.nickname;
     const connectServerPassword = params.serverPassword;
@@ -6731,6 +6731,7 @@ function AppInner() {
           identity: connectIdentityBlob || undefined,
           privilegeKey: connectPrivilegeKey.trim() || undefined,
           serverType: connectServerType || "auto",
+          randomizeHardwareId,
         })
       );
     };
@@ -7235,7 +7236,7 @@ function AppInner() {
       { id: sessionId, label: params.host || "…", connected: false, connecting: true },
     ]);
 
-    wireSocket(sessionId, socket, params, regenerateIdentity);
+    wireSocket(sessionId, socket, params, regenerateIdentity, randomizeHardwareId);
   };
 
   // Opens a fresh socket for a session that already exists (active or
@@ -7264,7 +7265,7 @@ function AppInner() {
       rec.parked = { ...rec.parked, connecting: true, connected: false, connectError: null };
     }
     updateTabMeta(sessionId, { connecting: true, connected: false });
-    wireSocket(sessionId, socket, params, regenerateIdentity);
+    wireSocket(sessionId, socket, params, regenerateIdentity, randomizeHardwareId);
   };
 
   const reconnectSessionRef = useRef(reconnectSession);
