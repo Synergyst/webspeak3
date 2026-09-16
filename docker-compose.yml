@@ -17,11 +17,11 @@ services:
     #    ports:
     #      - "8080:8080"
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: webspeak3-cloudflared
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+#  cloudflared:
+#    image: cloudflare/cloudflared:latest
+#    container_name: webspeak3-cloudflared
+#    restart: unless-stopped
+#    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     # Token comes from a gitignored .env file next to this compose file:
     #   CLOUDFLARE_TUNNEL_TOKEN=eyJ...
     # No depends_on/network wiring needed - the tunnel's Public Hostname
