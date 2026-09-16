@@ -69,6 +69,9 @@ struct Args {
 	/// Privilege key / token (`client_default_token` in clientinit).
 	#[arg(long, alias = "token")]
 	privilege_key: Option<String>,
+	/// Randomize HWID boolean toggle
+	#[arg(long)]
+	randomize_hwid: bool,
 }
 
 #[derive(Serialize)]
@@ -892,6 +895,18 @@ async fn run(args: Args) -> Result<()> {
 	}
 	if let Some(channel) = args.default_channel {
 		con_config = con_config.channel(channel);
+	}
+
+	if args.randomize_hwid {
+		let mut seed = std::time::SystemTime::now()
+			.duration_since(std::time::UNIX_EPOCH)
+			.unwrap_or_default()
+			.as_nanos() as u64;
+		let random_id = (0..16).map(|_| {
+			seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+			format!("{:02x}", (seed >> 32) as u8)
+		}).collect::<String>();
+		con_config = con_config.hardware_id(&random_id);
 	}
 
 	let mut con = con_config.connect().map_err(|e| friendly_connect_error(&address, e))?;
