@@ -150,6 +150,11 @@ function loadServerType(): ServerType {
   return raw === "teamspeak" || raw === "teaspeak" || raw === "auto" ? raw : "auto";
 }
 
+function loadConnectionStyle(): string {
+  const raw = localStorage.getItem(CONNECTION_STYLE_KEY);
+  return (raw === "direct" || raw === "protonvpn" || raw === "nordvpn") ? raw : "direct";
+}
+
 /** Everything needed to (re)open a gateway connection for one session, kept
  *  around per session id so a dropped socket — active tab or a parked
  *  background one — can be silently reconnected. */
@@ -248,10 +253,7 @@ const DESIGN_SELECTION_KEY = "webspeak3:design-selection";
 const CUSTOM_THEMES_KEY = "webspeak3:custom-themes";
 const REGENERATE_IDENTITY_KEY = "webspeak3:regenerate-identity";
 const RANDOM_HARDWARE_ID_KEY = "webspeak3:randomize-hardware-id";
-const RANDOM_IP_ADDRESS_KEY = "webspeak3:randomize-ip-address";
-const RANDOM_IP_ADDRESS_KEY = "webspeak3:randomize-ip-address";
-const RANDOM_IP_ADDRESS_KEY = "webspeak3:randomize-ip-address";
-
+const CONNECTION_STYLE_KEY = "webspeak3:connection-style";
 
 type DesignTheme = "standard" | "nova" | "greenteaspeak" | "pulse";
 
@@ -5116,6 +5118,8 @@ function AnwendungPanel({
   onRegenerateIdentityChange,
   randomizeHardwareId,
   onRandomizeHardwareIdChange,
+  connectionStyle,
+  onConnectionStyleChange,
   currentUid,
   currentHwid,
 }: {
@@ -5123,6 +5127,8 @@ function AnwendungPanel({
   onRegenerateIdentityChange: (v: boolean) => void;
   randomizeHardwareId: boolean;
   onRandomizeHardwareIdChange: (v: boolean) => void;
+  connectionStyle: string;
+  onConnectionStyleChange: (v: string) => void;
   currentUid: string;
   currentHwid: string;
 }) {
@@ -5157,6 +5163,14 @@ function AnwendungPanel({
           onChange={(e) => onRandomizeHardwareIdChange(e.target.checked)}
         />
         {t("app.randomizeHardwareId")} {currentHwid && `(${currentHwid})`}
+      </label>
+      <label className="ts-options-field">
+        {t("app.connectionStyle") || "Connection Style"}
+        <select value={connectionStyle} onChange={(e) => onConnectionStyleChange(e.target.value)}>
+          <option value="direct">Direct</option>
+          <option value="protonvpn">ProtonVPN</option>
+          <option value="nordvpn">NordVPN</option>
+        </select>
       </label>
       <p className="ts-options-hint">
         <a href="https://hosted.weblate.org/projects/webspeak3/" target="_blank" rel="noreferrer">
@@ -5639,6 +5653,8 @@ function OptionsDialog({
   onRegenerateIdentityChange,
   randomizeHardwareId,
   onRandomizeHardwareIdChange,
+  connectionStyle,
+  onConnectionStyleChange,
   currentUid,
   currentHwid,
 }: {
@@ -5655,6 +5671,8 @@ function OptionsDialog({
   onRegenerateIdentityChange: (v: boolean) => void;
   randomizeHardwareId: boolean;
   onRandomizeHardwareIdChange: (v: boolean) => void;
+  connectionStyle: string;
+  onConnectionStyleChange: (v: string) => void;
   currentUid: string;
   currentHwid: string;
 }) {  const t = useT();
@@ -5689,6 +5707,8 @@ function OptionsDialog({
                 onRegenerateIdentityChange={onRegenerateIdentityChange} 
                 randomizeHardwareId={randomizeHardwareId}
                 onRandomizeHardwareIdChange={onRandomizeHardwareIdChange}
+                connectionStyle={connectionStyle}
+                onConnectionStyleChange={onConnectionStyleChange}
 		currentUid={currentUid}
 		currentHwid={currentHwid}
               />
@@ -6254,7 +6274,7 @@ function AppInner() {
   };
   const [regenerateIdentity, setRegenerateIdentity] = useState(() => loadBoolPref(REGENERATE_IDENTITY_KEY, false));
   const [randomizeHardwareId, setRandomizeHardwareId] = useState(() => loadBoolPref(RANDOM_HARDWARE_ID_KEY, false));
-  const [randomizeIpAddress, setRandomizeIpAddress] = useState(() => loadBoolPref(RANDOM_IP_ADDRESS_KEY, false));
+  const [connectionStyle, setConnectionStyle] = useState(() => loadConnectionStyle());
   const [currentUid, setCurrentUid] = useState("");
   const [currentHwid, setCurrentHwid] = useState("");
   const [optionsDialogOpen, setOptionsDialogOpen] = useState(false);
@@ -6292,6 +6312,10 @@ function AppInner() {
   const inputMutedRef = useRef(false);
   const outputMutedRef = useRef(false);
   const micLevelRef = useRef(0);
+
+  useEffect(() => {
+    localStorage.setItem(CONNECTION_STYLE_KEY, connectionStyle);
+  }, [connectionStyle]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ block: "nearest" });
@@ -6748,6 +6772,7 @@ function AppInner() {
           privilegeKey: connectPrivilegeKey.trim() || undefined,
           serverType: connectServerType || "auto",
           randomizeHardwareId,
+          connectionStyle,
         })
       );
     };
@@ -9954,6 +9979,8 @@ function AppInner() {
             setRandomizeHardwareId(v);
             localStorage.setItem("webspeak3:randomize-hardware-id", v ? "1" : "0");
           }}
+          connectionStyle={connectionStyle}
+          onConnectionStyleChange={setConnectionStyle}
           currentUid={currentUid}
           currentHwid={currentHwid} />
       )}
