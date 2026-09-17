@@ -1,0 +1,27 @@
+services:
+  vpn_gateway:
+    image: qmcgaw/gluetun:latest
+    container_name: vpn_gateway
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER=protonvpn
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${PROTONVPN_WIREGUARD_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${PROTONVPN_WIREGUARD_ADDRESSES}
+      - SERVER_COUNTRIES=${VPN_SERVER_COUNTRIES:-United States}
+      - FIREWALL_OUTBOUND_SUBNETS=192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
+
+  webspeak3:
+    build: .
+    image: moepchi/webspeak3:latest
+    container_name: webspeak3
+    restart: unless-stopped
+    network_mode: "service:vpn_gateway"
+    environment:
+      - PORT=8080
+    depends_on:
+      - vpn_gateway

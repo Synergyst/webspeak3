@@ -1,0 +1,4 @@
+services:
+  webspeak3:
+    ports:
+      - "8080:8080"

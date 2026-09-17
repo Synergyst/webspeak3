@@ -1,0 +1,4 @@
+services:
+  vpn_gateway:
+    ports:
+      - "8080:8080"

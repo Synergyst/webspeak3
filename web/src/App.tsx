@@ -248,6 +248,9 @@ const DESIGN_SELECTION_KEY = "webspeak3:design-selection";
 const CUSTOM_THEMES_KEY = "webspeak3:custom-themes";
 const REGENERATE_IDENTITY_KEY = "webspeak3:regenerate-identity";
 const RANDOM_HARDWARE_ID_KEY = "webspeak3:randomize-hardware-id";
+const RANDOM_IP_ADDRESS_KEY = "webspeak3:randomize-ip-address";
+const RANDOM_IP_ADDRESS_KEY = "webspeak3:randomize-ip-address";
+const RANDOM_IP_ADDRESS_KEY = "webspeak3:randomize-ip-address";
 
 
 type DesignTheme = "standard" | "nova" | "greenteaspeak" | "pulse";
@@ -6251,6 +6254,7 @@ function AppInner() {
   };
   const [regenerateIdentity, setRegenerateIdentity] = useState(() => loadBoolPref(REGENERATE_IDENTITY_KEY, false));
   const [randomizeHardwareId, setRandomizeHardwareId] = useState(() => loadBoolPref(RANDOM_HARDWARE_ID_KEY, false));
+  const [randomizeIpAddress, setRandomizeIpAddress] = useState(() => loadBoolPref(RANDOM_IP_ADDRESS_KEY, false));
   const [currentUid, setCurrentUid] = useState("");
   const [currentHwid, setCurrentHwid] = useState("");
   const [optionsDialogOpen, setOptionsDialogOpen] = useState(false);
