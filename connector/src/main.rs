@@ -285,6 +285,8 @@ enum Event {
 	Talkers { clients: Vec<u16> },
 	#[serde(rename = "disconnected")]
 	Disconnected { reason: String },
+	#[serde(rename = "hwidUsed")]
+	HwidUsed { hwid: String },
 	#[serde(rename = "error")]
 	Error { message: String },
 	/// A "switch" to a password-protected channel was rejected because no (or
@@ -906,7 +908,8 @@ async fn run(args: Args) -> Result<()> {
 			seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
 			format!("{:02x}", (seed >> 32) as u8)
 		}).collect::<String>();
-		con_config = con_config.hardware_id(&random_id);
+		emit(&Event::HwidUsed { hwid: random_id.clone() });
+		con_config = con_config.hardware_id(random_id);
 	}
 
 	let mut con = con_config.connect().map_err(|e| friendly_connect_error(&address, e))?;

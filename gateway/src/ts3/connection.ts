@@ -153,6 +153,7 @@ export type Ts3ConnectionEvent =
   | { type: "talkers"; clients: number[] }
   | { type: "disconnected"; reason: string }
   | { type: "error"; message: string }
+  | { type: "hwidUsed"; hwid: string }
   | { type: "channelPasswordRequired"; channelId: number }
   | ({ type: "serverLog" } & ServerLogEntry)
   | {
@@ -322,6 +323,7 @@ export class Ts3Connection {
           | { type: "talkers"; clients: number[] }
           | { type: "disconnected"; reason: string }
           | { type: "error"; message: string }
+	  | { type: "hwidUsed"; hwid: string }
           | { type: "channelPasswordRequired"; channel_id: number }
           | ({ type: "serverLog" } & ServerLogEntry)
           | {

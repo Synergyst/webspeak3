@@ -5113,11 +5113,15 @@ function AnwendungPanel({
   onRegenerateIdentityChange,
   randomizeHardwareId,
   onRandomizeHardwareIdChange,
+  currentUid,
+  currentHwid,
 }: {
   regenerateIdentity: boolean;
   onRegenerateIdentityChange: (v: boolean) => void;
   randomizeHardwareId: boolean;
   onRandomizeHardwareIdChange: (v: boolean) => void;
+  currentUid: string;
+  currentHwid: string;
 }) {
   const t = useT();
   const { langPref, setLangPref } = useLanguage();
@@ -5141,7 +5145,7 @@ function AnwendungPanel({
           checked={regenerateIdentity}
           onChange={(e) => onRegenerateIdentityChange(e.target.checked)}
         />
-        {t("app.regenerateIdentity")}
+        {t("app.regenerateIdentity")} {currentUid && `(${currentUid})`}
       </label>
       <label className="ts-options-checkbox">
         <input
@@ -5149,7 +5153,7 @@ function AnwendungPanel({
           checked={randomizeHardwareId}
           onChange={(e) => onRandomizeHardwareIdChange(e.target.checked)}
         />
-        {t("app.randomizeHardwareId")}
+        {t("app.randomizeHardwareId")} {currentHwid && `(${currentHwid})`}
       </label>
       <p className="ts-options-hint">
         <a href="https://hosted.weblate.org/projects/webspeak3/" target="_blank" rel="noreferrer">
@@ -5632,6 +5636,8 @@ function OptionsDialog({
   onRegenerateIdentityChange,
   randomizeHardwareId,
   onRandomizeHardwareIdChange,
+  currentUid,
+  currentHwid,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
@@ -5646,6 +5652,8 @@ function OptionsDialog({
   onRegenerateIdentityChange: (v: boolean) => void;
   randomizeHardwareId: boolean;
   onRandomizeHardwareIdChange: (v: boolean) => void;
+  currentUid: string;
+  currentHwid: string;
 }) {  const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
   const backdrop = useBackdropDismiss(onClose);
@@ -5678,6 +5686,8 @@ function OptionsDialog({
                 onRegenerateIdentityChange={onRegenerateIdentityChange} 
                 randomizeHardwareId={randomizeHardwareId}
                 onRandomizeHardwareIdChange={onRandomizeHardwareIdChange}
+		currentUid={currentUid}
+		currentHwid={currentHwid}
               />
             ) : active.id === "wiedergabe" ? (
               <WiedergabePanel audio={audio} />
@@ -6241,6 +6251,8 @@ function AppInner() {
   };
   const [regenerateIdentity, setRegenerateIdentity] = useState(() => loadBoolPref(REGENERATE_IDENTITY_KEY, false));
   const [randomizeHardwareId, setRandomizeHardwareId] = useState(() => loadBoolPref(RANDOM_HARDWARE_ID_KEY, false));
+  const [currentUid, setCurrentUid] = useState("");
+  const [currentHwid, setCurrentHwid] = useState("");
   const [optionsDialogOpen, setOptionsDialogOpen] = useState(false);
   const [optionsSection, setOptionsSection] = useState<string>(OPTIONS_SECTIONS[0].id);
   const socketRef = useRef<WebSocket | DemoSocket | null>(null);
@@ -6826,6 +6838,9 @@ function AppInner() {
           previousClientsRef.current = null;
           void playSound("connect");
           break;
+	case "hwidUsed":
+		setCurrentHwid(data.hwid);
+		break;
         case "channels": {
           const newClients: ClientInfo[] = data.clients;
           const prevClients = previousClientsRef.current;
@@ -6848,6 +6863,8 @@ function AppInner() {
           if (typeof data.ownClientId === "number" && data.ownClientId > 0) {
             setOwnClientId(data.ownClientId);
           }
+	  const me = data.clients.find(c => c.id === data.ownClientId);
+	  if (me) setCurrentUid(me.uid);
           // Only apply positive max — gateway maps missing connector fields to 0.
           if (typeof data.serverMaxClients === "number" && data.serverMaxClients > 0) {
             setServerMaxClients(data.serverMaxClients);
@@ -9923,22 +9940,18 @@ function AppInner() {
             autoGainControlEnabled,
             onToggleAutoGainControl: handleToggleAutoGainControl,
           }}
-       
-                regenerateIdentity={regenerateIdentity}
-                onRegenerateIdentityChange={(v) => {
-                  setRegenerateIdentity(v);
-                  localStorage.setItem("webspeak3:regenerate-identity", v ? "1" : "0");
-                }}
-                regenerateIdentity={regenerateIdentity}
-                onRegenerateIdentityChange={(v) => {
-                  setRegenerateIdentity(v);
-                  localStorage.setItem("webspeak3:regenerate-identity", v ? "1" : "0");
-                }}
-                randomizeHardwareId={randomizeHardwareId}
-                onRandomizeHardwareIdChange={(v) => {
-                  setRandomizeHardwareId(v);
-                  localStorage.setItem("webspeak3:randomize-hardware-id", v ? "1" : "0");
-                }} />
+          regenerateIdentity={regenerateIdentity}
+          onRegenerateIdentityChange={(v) => {
+            setRegenerateIdentity(v);
+            localStorage.setItem("webspeak3:regenerate-identity", v ? "1" : "0");
+          }}
+          randomizeHardwareId={randomizeHardwareId}
+          onRandomizeHardwareIdChange={(v) => {
+            setRandomizeHardwareId(v);
+            localStorage.setItem("webspeak3:randomize-hardware-id", v ? "1" : "0");
+          }}
+          currentUid={currentUid}
+          currentHwid={currentHwid} />
       )}
 
       {connectError && (

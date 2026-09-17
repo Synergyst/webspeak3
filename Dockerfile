@@ -3,8 +3,24 @@ FROM rust:1-bookworm AS connector-builder
 RUN apt-get update && apt-get install -y --no-install-recommends cmake && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY tsclientlib/ tsclientlib/
-COPY connector/ connector/
+
+# CURRENT VERSION (Slow)
+#COPY connector/ connector/
+#WORKDIR /src/connector
+#ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
+#RUN cargo build --release
+
+# OPTIMIZED VERSION (Fast)
+# 1. Copy only the dependency manifests
+COPY connector/Cargo.toml connector/Cargo.lock ./connector/
+# 2. Create a dummy source file to trigger the dependency build
+RUN mkdir -p connector/src && echo "fn main() {}" > connector/src/main.rs
+# 3. Build the dependencies (this layer will now stay cached!)
 WORKDIR /src/connector
+RUN cargo build --release
+# 4. Now copy the REAL source code
+COPY connector/ connector/
+# 5. Build the actual app (this will now take seconds, not minutes)
 ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
 RUN cargo build --release
 
@@ -28,7 +44,7 @@ COPY web/ ./
 # elsewhere; left alone, the project default is used. The "keep" sentinel
 # exists because an unset build arg and an empty one are indistinguishable
 # inside RUN - without it, "not passed" would silently mean "remove".
-ARG DONATE_URL=keep
+ARG DONATE_URL=
 # tsc -b currently fails on pre-existing type errors unrelated to this build;
 # vite build alone is enough to produce the production bundle.
 RUN if [ "$DONATE_URL" = "keep" ]; then npx vite build; \
