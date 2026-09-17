@@ -899,18 +899,33 @@ async fn run(args: Args) -> Result<()> {
 		con_config = con_config.channel(channel);
 	}
 
-	if args.randomize_hwid {
+	let final_hwid = if args.randomize_hwid {
 		let mut seed = std::time::SystemTime::now()
 			.duration_since(std::time::UNIX_EPOCH)
 			.unwrap_or_default()
 			.as_nanos() as u64;
-		let random_id = (0..16).map(|_| {
+		(0..16).map(|_| {
 			seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
 			format!("{:02x}", (seed >> 32) as u8)
-		}).collect::<String>();
-		emit(&Event::HwidUsed { hwid: random_id.clone() });
-		con_config = con_config.hardware_id(random_id);
-	}
+		}).collect::<String>()
+	} else {
+		con_config.get_hardware_id().to_string()
+	};
+	emit(&Event::HwidUsed { hwid: final_hwid.clone() });
+	con_config = con_config.hardware_id(final_hwid);
+
+/*    if args.randomize_hwid {
+        let mut seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+        let random_id = (0..16).map(|_| {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            format!(\"{:02x}\", (seed >> 32) as u8)
+        }).collect::<String>();
+        emit(&Event::HwidUsed { hwid: random_id.clone() });
+        con_config = con_config.hardware_id(random_id);
+    }*/
 
 	let mut con = con_config.connect().map_err(|e| friendly_connect_error(&address, e))?;
 

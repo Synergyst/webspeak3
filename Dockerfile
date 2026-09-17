@@ -5,24 +5,24 @@ WORKDIR /src
 COPY tsclientlib/ tsclientlib/
 
 # CURRENT VERSION (Slow)
-#COPY connector/ connector/
-#WORKDIR /src/connector
-#ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
-#RUN cargo build --release
+COPY connector/ connector/
+WORKDIR /src/connector
+ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
+RUN cargo build --release
 
 # OPTIMIZED VERSION (Fast)
 # 1. Copy only the dependency manifests
-COPY connector/Cargo.toml connector/Cargo.lock ./connector/
+#COPY connector/Cargo.toml connector/Cargo.lock ./connector/
 # 2. Create a dummy source file to trigger the dependency build
-RUN mkdir -p connector/src && echo "fn main() {}" > connector/src/main.rs
+#RUN mkdir -p connector/src && echo "fn main() {}" > connector/src/main.rs
 # 3. Build the dependencies (this layer will now stay cached!)
-WORKDIR /src/connector
-RUN cargo build --release
+#WORKDIR /src/connector
+#RUN cargo build --release
 # 4. Now copy the REAL source code
-COPY connector/ connector/
+#COPY connector/ connector/
 # 5. Build the actual app (this will now take seconds, not minutes)
-ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
-RUN cargo build --release
+#ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
+#RUN cargo build --release
 
 # --- Web frontend ---------------------------------------------------------
 FROM node:22-bookworm-slim AS web-builder
