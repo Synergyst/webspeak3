@@ -82,6 +82,20 @@ async fn rotate_provider(Path(provider): Path<String>) -> Json<RotationResponse>
         }
     };
 
+    // --- SMART CHECK ---
+    let compose_path = StdPath::new(BASE_DIR).join(COMPOSE_FILE);
+    if let Ok(target) = fs::read_link(&compose_path) {
+        let target_str = target.to_string_lossy();
+        if target_str.contains(provider_suffix) {
+            info!("Already using provider {}, skipping restart.", provider);
+            return Json(RotationResponse {
+                success: true,
+                message: format!("Already connected via {}", provider),
+            });
+        }
+    }
+    // --- END SMART CHECK ---
+
     let files_to_link = [
         (COMPOSE_FILE, format!("{}.{}", COMPOSE_FILE, provider_suffix)),
         (OVERRIDE_FILE, format!("{}.{}", OVERRIDE_FILE, provider_suffix)),
@@ -126,11 +140,10 @@ async fn rotate_provider(Path(provider): Path<String>) -> Json<RotationResponse>
         return Json(RotationResponse { success: false, message: e.to_string() });
     }
 
-    // Give the containers a moment to actually start and initialize the VPN
     sleep(Duration::from_secs(5)).await;
 
     let mut attempts = 0;
-    let max_attempts = 20; // Increased patience
+    let max_attempts = 20;
     let last_ip = get_current_ip().await;
     
     info!("Verifying IP change via Gluetun. Starting IP: {}", last_ip);
