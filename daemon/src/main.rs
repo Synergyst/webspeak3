@@ -140,7 +140,7 @@ async fn rotate_provider(Path(provider): Path<String>) -> Json<RotationResponse>
         return Json(RotationResponse { success: false, message: e.to_string() });
     }
 
-    sleep(Duration::from_secs(5)).await;
+    sleep(Duration::from_secs(15)).await;
 
     let mut attempts = 0;
     let max_attempts = 20;
