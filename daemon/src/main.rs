@@ -19,15 +19,26 @@ const OVERRIDE_FILE: &str = "docker-compose.override.yml";
 const VPN_CONTAINER: &str = "vpn_gateway";
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct StatusResponse {
     provider: String,
     ip: String,
+    host_ip: String,
+    vpn_ip: String,
+    leak: bool,
 }
 
 #[derive(Serialize)]
 struct RotationResponse {
     success: bool,
     message: String,
+}
+
+#[derive(Serialize)]
+struct LeakResponse {
+    leak: bool,
+    host_ip: String,
+    vpn_ip: String,
 }
 
 async fn get_current_ip() -> String {
@@ -48,8 +59,27 @@ async fn get_current_ip() -> String {
     }
 }
 
+async fn get_host_ip() -> String {
+    let output = Command::new("curl")
+        .args(["-s", "https://ipinfo.io/ip"])
+        .output();
+
+    match output {
+        Ok(out) => {
+            let ip = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if ip.is_empty() {
+                "Unknown".to_string()
+            } else {
+                ip
+            }
+        }
+        Err(_) => "Unknown".to_string(),
+    }
+}
+
 async fn get_status() -> Json<StatusResponse> {
-    let ip = get_current_ip().await;
+    let host_ip = get_host_ip().await;
+    let vpn_ip = get_current_ip().await;
 
     let compose_path = StdPath::new(BASE_DIR).join(COMPOSE_FILE);
     let provider = match fs::read_link(&compose_path) {
@@ -63,7 +93,31 @@ async fn get_status() -> Json<StatusResponse> {
         Err(_) => "Unknown".to_string(),
     };
 
-    Json(StatusResponse { provider, ip })
+    let is_direct = provider == "Direct";
+    let ip = if is_direct { host_ip.clone() } else { vpn_ip.clone() };
+    let leak = if is_direct {
+        false
+    } else {
+        host_ip == "Unknown" || vpn_ip == "Unknown" || host_ip == vpn_ip
+    };
+
+    Json(StatusResponse { provider, ip, host_ip, vpn_ip, leak })
+}
+
+async fn verify_leak() -> Json<LeakResponse> {
+    let compose_path = StdPath::new(BASE_DIR).join(COMPOSE_FILE);
+    if let Ok(target) = fs::read_link(&compose_path) {
+        if target.to_string_lossy().contains("direct") {
+            return Json(LeakResponse { leak: false, host_ip: "".into(), vpn_ip: "".into() });
+        }
+    }
+
+    let host_ip = get_host_ip().await;
+    let vpn_ip = get_current_ip().await;
+
+    let leak = host_ip == "Unknown" || vpn_ip == "Unknown" || host_ip == vpn_ip;
+
+    Json(LeakResponse { leak, host_ip, vpn_ip })
 }
 
 async fn rotate_provider(Path(provider): Path<String>) -> Json<RotationResponse> {
@@ -179,6 +233,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/status", get(get_status))
+        .route("/verify-leak", get(verify_leak))
         .route("/rotate/:provider", post(rotate_provider))
         .layer(CorsLayer::permissive());
 
