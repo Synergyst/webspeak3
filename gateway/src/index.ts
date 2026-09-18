@@ -530,6 +530,23 @@ wss.on("connection", (socket: WebSocket) => {
           liveConnections.delete(connection);
           connection = undefined;
         }
+
+        const connectionStyle = typeof msg.connectionStyle === "string" ? msg.connectionStyle : "Direct";
+        
+        if (connectionStyle !== "Direct") {
+          try {
+            const response = await fetch(`http://host.docker.internal:3000/rotate/${connectionStyle}`, { method: "POST" });
+            const result = await response.json() as { success: boolean; message: string };
+            if (!result.success) {
+              socket.send(JSON.stringify({ type: "error", message: `Network rotation failed: ${result.message}` }));
+              break;
+            }
+          } catch (e) {
+            socket.send(JSON.stringify({ type: "error", message: `Could not connect to Network Manager Daemon: ${e}` }));
+            break;
+          }
+        }
+
         const options: Ts3ConnectOptions = {
           host: msg.host,
           nickname: msg.nickname,
