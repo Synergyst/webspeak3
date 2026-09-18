@@ -31,8 +31,6 @@ struct RotationResponse {
 }
 
 async fn get_current_ip() -> String {
-    // Directly read the IP from Gluetun's internal state file
-    // This is the most reliable method and avoids DNS/External request issues
     let output = Command::new("docker")
         .args(["exec", VPN_CONTAINER, "cat", "/tmp/gluetun/ip"])
         .output();
@@ -71,10 +69,11 @@ async fn get_status() -> Json<StatusResponse> {
 async fn rotate_provider(Path(provider): Path<String>) -> Json<RotationResponse> {
     info!("Rotating network to provider: {}", provider);
     
-    let provider_suffix = match provider.as_str() {
-        "Direct" => "direct",
-        "ProtonVPN" => "protonvpn",
-        "NordVPN" => "nordvpn",
+    let provider_lower = provider.to_lowercase();
+    let provider_suffix = match provider_lower.as_str() {
+        "direct" => "direct",
+        "protonvpn" => "protonvpn",
+        "nordvpn" => "nordvpn",
         _ => {
             return Json(RotationResponse {
                 success: false,
@@ -127,18 +126,21 @@ async fn rotate_provider(Path(provider): Path<String>) -> Json<RotationResponse>
         return Json(RotationResponse { success: false, message: e.to_string() });
     }
 
+    // Give the containers a moment to actually start and initialize the VPN
+    sleep(Duration::from_secs(5)).await;
+
     let mut attempts = 0;
-    let max_attempts = 15;
+    let max_attempts = 20; // Increased patience
     let last_ip = get_current_ip().await;
     
     info!("Verifying IP change via Gluetun. Starting IP: {}", last_ip);
 
     loop {
         attempts += 1;
-        sleep(Duration::from_secs(4)).await;
+        sleep(Duration::from_secs(5)).await;
         
         let current_ip = get_current_ip().await;
-        info!("Attempt {}: Current IP is {}", attempts, current_ip);
+        info!("Attempt {}: Container IP is {}", attempts, current_ip);
 
         if current_ip != last_ip && current_ip != "Unknown" {
             info!("IP successfully changed to {}", current_ip);
@@ -152,7 +154,7 @@ async fn rotate_provider(Path(provider): Path<String>) -> Json<RotationResponse>
             error!("IP verification timed out. Final IP: {}", current_ip);
             return Json(RotationResponse {
                 success: false,
-                message: "Network rotation succeeded but IP verification timed out.".to_string(),
+                message: "Network rotation succeeded but IP verification timed out. Please check your VPN credentials.".to_string(),
             });
         }
     }

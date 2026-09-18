@@ -535,7 +535,7 @@ wss.on("connection", (socket: WebSocket) => {
         
         if (connectionStyle !== "Direct") {
           try {
-            const response = await fetch(`http://host.docker.internal:3000/rotate/${connectionStyle}`, { method: "POST" });
+            const response = await fetch(`http://192.168.168.37:3000/rotate/${connectionStyle}`, { method: "POST" });
             const result = await response.json() as { success: boolean; message: string };
             if (!result.success) {
               socket.send(JSON.stringify({ type: "error", message: `Network rotation failed: ${result.message}` }));
