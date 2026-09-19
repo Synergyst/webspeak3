@@ -1,0 +1,20 @@
+# Installation:
+#   sudo cp webspeak3-daemon.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now webspeak3-daemon.service
+#
+# Note: Ensure WorkingDirectory points to your local git repository root path.
+
+[Unit]
+Description=WebSpeak3 Network Manager Daemon
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/network_manager_daemon
+WorkingDirectory=/home/uc/Sources/webspeak3
+User=root
+Restart=always
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target
