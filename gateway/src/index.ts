@@ -349,6 +349,59 @@ const tlsOptions =
     ? { cert: readFileSync(TLS_CERT), key: readFileSync(TLS_KEY) }
     : null;
 
+async function verifyIpLeak(): Promise<boolean> {
+  try {
+    const res = await fetch("http://host.docker.internal:3000/verify-leak");
+    const data = await res.json() as { leak: boolean };
+    return data.leak;
+  } catch (e) {
+    console.error(`[killswitch] Leak check failed: ${e}`);
+    return true; // Fail-safe: assume leak if daemon is unreachable
+  }
+}
+
+type NetworkStatus = {
+  provider: string;
+  publicIp: string;
+  hostIp: string;
+  vpnIp: string;
+  leak: boolean;
+};
+
+async function fetchVerifiedNetworkStatus(): Promise<NetworkStatus> {
+  try {
+    const res = await fetch("http://host.docker.internal:3000/status");
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const data = await res.json() as {
+      provider?: unknown;
+      ip?: unknown;
+      hostIp?: unknown;
+      vpnIp?: unknown;
+      leak?: unknown;
+    };
+    const provider = typeof data.provider === "string" ? data.provider : "Unknown";
+    const hostIp = typeof data.hostIp === "string" ? data.hostIp : "Unknown";
+    const vpnIp = typeof data.vpnIp === "string" ? data.vpnIp : "Unknown";
+    const ip = typeof data.ip === "string" ? data.ip : "Unknown";
+    return {
+      provider,
+      publicIp: ip !== "Unknown" ? ip : provider === "Direct" ? hostIp : vpnIp,
+      hostIp,
+      vpnIp,
+      leak: data.leak === true,
+    };
+  } catch (e) {
+    console.error(`[network-status] Status check failed: ${e}`);
+    return {
+      provider: "Unknown",
+      publicIp: "Unknown",
+      hostIp: "Unknown",
+      vpnIp: "Unknown",
+      leak: true,
+    };
+  }
+}
+
 const requestHandler = (req: IncomingMessage, res: ServerResponse) => {
   void (async () => {
     try {
@@ -532,19 +585,22 @@ wss.on("connection", (socket: WebSocket) => {
         }
 
         const connectionStyle = typeof msg.connectionStyle === "string" ? msg.connectionStyle : "Direct";
-        
-        if (connectionStyle !== "Direct") {
-          try {
-            const response = await fetch(`http://host.docker.internal:3000/rotate/${connectionStyle}`, { method: "POST" });
-            const result = await response.json() as { success: boolean; message: string };
-            if (!result.success) {
-              socket.send(JSON.stringify({ type: "error", message: `Network rotation failed: ${result.message}` }));
-              break;
-            }
-          } catch (e) {
-            socket.send(JSON.stringify({ type: "error", message: `Could not connect to Network Manager Daemon: ${e}` }));
+
+        try {
+          const response = await fetch(`http://host.docker.internal:3000/rotate/${encodeURIComponent(connectionStyle)}`, { method: "POST" });
+          const result = await response.json() as { success: boolean; message: string };
+          if (!response.ok || !result.success) {
+            socket.send(JSON.stringify({ type: "error", message: `Network rotation failed: ${result.message}` }));
             break;
           }
+        } catch (e) {
+          socket.send(JSON.stringify({ type: "error", message: `Could not connect to Network Manager Daemon: ${e}` }));
+          break;
+        }
+
+        if (await verifyIpLeak()) {
+          socket.send(JSON.stringify({ type: "error", message: "CRITICAL_LEAK: Real IP exposed! Connection aborted." }));
+          break;
         }
 
         const options: Ts3ConnectOptions = {
@@ -561,17 +617,27 @@ wss.on("connection", (socket: WebSocket) => {
         connection = new Ts3Connection(options);
         liveConnections.add(connection);
         connection.onEvent((event) => {
-          if (shuttingDown) return;
-          if (LOG_CONNECTIONS) {
-            if (event.type === "connected") {
-              console.log(
-                `[connections] connected host=${options.host} server=${event.serverName} at=${new Date().toISOString()}`
-              );
-            } else if (event.type === "disconnected") {
-              console.log(`[connections] disconnected host=${options.host} at=${new Date().toISOString()}`);
+          void (async () => {
+            if (shuttingDown) return;
+            if (LOG_CONNECTIONS) {
+              if (event.type === "connected") {
+                console.log(
+                  `[connections] connected host=${options.host} server=${event.serverName} at=${new Date().toISOString()}`
+                );
+              } else if (event.type === "disconnected") {
+                console.log(`[connections] disconnected host=${options.host} at=${new Date().toISOString()}`);
+              }
             }
-          }
-          socket.send(JSON.stringify(event));
+
+            if (event.type === "connected") {
+              const networkStatus = await fetchVerifiedNetworkStatus();
+              socket.send(JSON.stringify({ ...event, ...networkStatus, type: "connected" }));
+            } else {
+              socket.send(JSON.stringify(event));
+            }
+          })().catch((error) => {
+            console.error(`[gateway] Failed to forward connector event: ${error}`);
+          });
         });
         await connection.connect();
         break;

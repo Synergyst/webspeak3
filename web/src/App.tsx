@@ -5122,6 +5122,10 @@ function AnwendungPanel({
   onConnectionStyleChange,
   currentUid,
   currentHwid,
+  currentIp,
+  currentHostIp,
+  currentVpnIp,
+  currentProvider,
 }: {
   regenerateIdentity: boolean;
   onRegenerateIdentityChange: (v: boolean) => void;
@@ -5131,6 +5135,10 @@ function AnwendungPanel({
   onConnectionStyleChange: (v: string) => void;
   currentUid: string;
   currentHwid: string;
+  currentIp: string;
+  currentHostIp: string;
+  currentVpnIp: string;
+  currentProvider: string;
 }) {
   const t = useT();
   const { langPref, setLangPref } = useLanguage();
@@ -5172,6 +5180,12 @@ function AnwendungPanel({
           <option value="nordvpn">NordVPN</option>
         </select>
       </label>
+      <div className="ts-options-network-status">
+        <div><strong>Verified public IP:</strong> {currentIp || "Not connected"}</div>
+        <div><strong>Host IP:</strong> {currentHostIp || "Unknown"}</div>
+        <div><strong>VPN IP:</strong> {currentVpnIp || "Unknown"}</div>
+        <div><strong>Provider:</strong> {currentProvider || "Unknown"}</div>
+      </div>
       <p className="ts-options-hint">
         <a href="https://hosted.weblate.org/projects/webspeak3/" target="_blank" rel="noreferrer">
           {t("app.language.helpTranslate")}
@@ -5657,6 +5671,10 @@ function OptionsDialog({
   onConnectionStyleChange,
   currentUid,
   currentHwid,
+  currentIp,
+  currentHostIp,
+  currentVpnIp,
+  currentProvider,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
@@ -5675,6 +5693,10 @@ function OptionsDialog({
   onConnectionStyleChange: (v: string) => void;
   currentUid: string;
   currentHwid: string;
+  currentIp: string;
+  currentHostIp: string;
+  currentVpnIp: string;
+  currentProvider: string;
 }) {  const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
   const backdrop = useBackdropDismiss(onClose);
@@ -5711,6 +5733,10 @@ function OptionsDialog({
                 onConnectionStyleChange={onConnectionStyleChange}
 		currentUid={currentUid}
 		currentHwid={currentHwid}
+                currentIp={currentIp}
+                currentHostIp={currentHostIp}
+                currentVpnIp={currentVpnIp}
+                currentProvider={currentProvider}
               />
             ) : active.id === "wiedergabe" ? (
               <WiedergabePanel audio={audio} />
@@ -6277,6 +6303,10 @@ function AppInner() {
   const [connectionStyle, setConnectionStyle] = useState(() => loadConnectionStyle());
   const [currentUid, setCurrentUid] = useState("");
   const [currentHwid, setCurrentHwid] = useState("");
+  const [currentIp, setCurrentIp] = useState("");
+  const [currentHostIp, setCurrentHostIp] = useState("");
+  const [currentVpnIp, setCurrentVpnIp] = useState("");
+  const [currentProvider, setCurrentProvider] = useState("");
   const [optionsDialogOpen, setOptionsDialogOpen] = useState(false);
   const [optionsSection, setOptionsSection] = useState<string>(OPTIONS_SECTIONS[0].id);
   const socketRef = useRef<WebSocket | DemoSocket | null>(null);
@@ -6590,6 +6620,10 @@ function AppInner() {
     setConnected(false);
     setConnecting(false);
     setConnectError(null);
+    setCurrentIp("");
+    setCurrentHostIp("");
+    setCurrentVpnIp("");
+    setCurrentProvider("");
     setChannelPasswordPrompt(null);
     channelPasswordCacheRef.current.clear();
     setChannels([]);
@@ -6866,6 +6900,10 @@ function AppInner() {
           setServerChat((prev) => [...prev, { from: "Server", message: data.welcomeMessage }]);
           previousClientsRef.current = null;
           void playSound("connect");
+          setCurrentIp(typeof data.publicIp === "string" ? data.publicIp : "Unknown");
+          setCurrentHostIp(typeof data.hostIp === "string" ? data.hostIp : "Unknown");
+          setCurrentVpnIp(typeof data.vpnIp === "string" ? data.vpnIp : "Unknown");
+          setCurrentProvider(typeof data.provider === "string" ? data.provider : "Unknown");
           break;
 	case "hwidUsed":
 		setCurrentHwid(data.hwid);
@@ -9982,7 +10020,11 @@ function AppInner() {
           connectionStyle={connectionStyle}
           onConnectionStyleChange={setConnectionStyle}
           currentUid={currentUid}
-          currentHwid={currentHwid} />
+          currentHwid={currentHwid}
+          currentIp={currentIp}
+          currentHostIp={currentHostIp}
+          currentVpnIp={currentVpnIp}
+          currentProvider={currentProvider} />
       )}
 
       {connectError && (
