@@ -14,6 +14,13 @@ services:
       - VPN_TYPE=wireguard
       - WIREGUARD_PRIVATE_KEY=${NORDVPN_WIREGUARD_PRIVATE_KEY}
       - SERVER_COUNTRIES=${VPN_SERVER_COUNTRIES:-United States}
+      # Use encrypted DNS over HTTPS instead of the default DNS-over-TLS.
+      # This avoids UDP/853 or TCP/853 filtering delaying VPN startup.
+      - DNS_UPSTREAM_RESOLVER_TYPE=doh
+      - DNS_UPSTREAM_RESOLVERS=cloudflare
+      # Avoid synchronous remote block-list fetching during startup.
+      - BLOCK_MALICIOUS=off
+      - DNS_UPDATE_PERIOD=0
       - FIREWALL_OUTBOUND_SUBNETS=192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
 
   webspeak3:

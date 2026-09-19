@@ -362,6 +362,7 @@ async function verifyIpLeak(): Promise<boolean> {
 
 type NetworkStatus = {
   provider: string;
+  profile: string | null;
   publicIp: string;
   hostIp: string;
   vpnIp: string;
@@ -374,17 +375,20 @@ async function fetchVerifiedNetworkStatus(): Promise<NetworkStatus> {
     if (!res.ok) throw new Error(`status ${res.status}`);
     const data = await res.json() as {
       provider?: unknown;
+      profile?: unknown;
       ip?: unknown;
       hostIp?: unknown;
       vpnIp?: unknown;
       leak?: unknown;
     };
     const provider = typeof data.provider === "string" ? data.provider : "Unknown";
+    const profile = typeof data.profile === "string" && data.profile.trim() ? data.profile : null;
     const hostIp = typeof data.hostIp === "string" ? data.hostIp : "Unknown";
     const vpnIp = typeof data.vpnIp === "string" ? data.vpnIp : "Unknown";
     const ip = typeof data.ip === "string" ? data.ip : "Unknown";
     return {
       provider,
+      profile,
       publicIp: ip !== "Unknown" ? ip : provider === "Direct" ? hostIp : vpnIp,
       hostIp,
       vpnIp,
@@ -394,6 +398,7 @@ async function fetchVerifiedNetworkStatus(): Promise<NetworkStatus> {
     console.error(`[network-status] Status check failed: ${e}`);
     return {
       provider: "Unknown",
+      profile: null,
       publicIp: "Unknown",
       hostIp: "Unknown",
       vpnIp: "Unknown",
@@ -640,6 +645,46 @@ wss.on("connection", (socket: WebSocket) => {
           });
         });
         await connection.connect();
+        break;
+      }
+      case "rotateProfile": {
+        const provider = typeof msg.provider === "string" ? msg.provider.toLowerCase() : "";
+        if (provider !== "nordvpn" && provider !== "protonvpn") {
+          socket.send(JSON.stringify({ type: "profileRotationError", message: "Select NordVPN or ProtonVPN before rotating a VPN profile." }));
+          break;
+        }
+
+        // The daemon intentionally recreates the Gluetun/WebSpeak3 shared
+        // network namespace for a manual profile rotation. Tell the browser
+        // first: the Gateway's own WebSocket will close as an expected part of
+        // that recreation, before this request can normally return.
+        socket.send(JSON.stringify({ type: "profileRotationStarting", provider }));
+        try {
+          const response = await fetch(
+            `http://host.docker.internal:3000/rotate/${encodeURIComponent(provider)}/profile`,
+            { method: "POST" }
+          );
+          const result = await response.json() as { success?: unknown; message?: unknown };
+          if (!response.ok || result.success !== true) {
+            const message = typeof result.message === "string" ? result.message : "Profile rotation failed.";
+            socket.send(JSON.stringify({ type: "profileRotationError", message }));
+            break;
+          }
+          // This is reachable only if the daemon completed without tearing
+          // down this Gateway first (for example in a non-container dev run).
+          socket.send(JSON.stringify({ type: "profileRotationAccepted", provider }));
+        } catch (error) {
+          // A normal Docker recreation tears down this Gateway mid-request;
+          // the browser's expected WebSocket close/reconnect path handles it.
+          if (!shuttingDown) {
+            console.error(`[profile-rotation] Request failed: ${error}`);
+            try {
+              socket.send(JSON.stringify({ type: "profileRotationError", message: "Could not start VPN profile rotation." }));
+            } catch {
+              /* socket was closed during the expected restart */
+            }
+          }
+        }
         break;
       }
       case "switchChannel": {

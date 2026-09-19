@@ -5126,6 +5126,11 @@ function AnwendungPanel({
   currentHostIp,
   currentVpnIp,
   currentProvider,
+  currentProfile,
+  canRotateProfile,
+  profileRotationPending,
+  profileRotationMessage,
+  onRotateProfile,
 }: {
   regenerateIdentity: boolean;
   onRegenerateIdentityChange: (v: boolean) => void;
@@ -5139,6 +5144,11 @@ function AnwendungPanel({
   currentHostIp: string;
   currentVpnIp: string;
   currentProvider: string;
+  currentProfile: string;
+  canRotateProfile: boolean;
+  profileRotationPending: boolean;
+  profileRotationMessage: string | null;
+  onRotateProfile: () => void;
 }) {
   const t = useT();
   const { langPref, setLangPref } = useLanguage();
@@ -5185,6 +5195,24 @@ function AnwendungPanel({
         <div><strong>Host IP:</strong> {currentHostIp || "Unknown"}</div>
         <div><strong>VPN IP:</strong> {currentVpnIp || "Unknown"}</div>
         <div><strong>Provider:</strong> {currentProvider || "Unknown"}</div>
+        <div><strong>Profile:</strong> {currentProfile || (currentProvider === "Direct" ? "Not applicable" : "Not selected")}</div>
+      </div>
+      <div className="ts-options-profile-rotation">
+        <button
+          type="button"
+          onClick={onRotateProfile}
+          disabled={!canRotateProfile || profileRotationPending}
+        >
+          {profileRotationPending ? "Rotating VPN profile…" : "Rotate VPN profile"}
+        </button>
+        <span>
+          {profileRotationMessage
+            ?? (connectionStyle === "direct"
+              ? "Select NordVPN or ProtonVPN to rotate a VPN profile."
+              : canRotateProfile
+                ? "Rotation restarts WebSpeak3 and reconnects active sessions."
+                : "Connect to a TeamSpeak server before rotating a VPN profile.")}
+        </span>
       </div>
       <p className="ts-options-hint">
         <a href="https://hosted.weblate.org/projects/webspeak3/" target="_blank" rel="noreferrer">
@@ -5675,6 +5703,11 @@ function OptionsDialog({
   currentHostIp,
   currentVpnIp,
   currentProvider,
+  currentProfile,
+  canRotateProfile,
+  profileRotationPending,
+  profileRotationMessage,
+  onRotateProfile,
 }: {
   section: string;
   onSectionChange: (id: string) => void;
@@ -5697,6 +5730,11 @@ function OptionsDialog({
   currentHostIp: string;
   currentVpnIp: string;
   currentProvider: string;
+  currentProfile: string;
+  canRotateProfile: boolean;
+  profileRotationPending: boolean;
+  profileRotationMessage: string | null;
+  onRotateProfile: () => void;
 }) {  const t = useT();
   const active = OPTIONS_SECTIONS.find((s) => s.id === section) ?? OPTIONS_SECTIONS[0];
   const backdrop = useBackdropDismiss(onClose);
@@ -5737,6 +5775,11 @@ function OptionsDialog({
                 currentHostIp={currentHostIp}
                 currentVpnIp={currentVpnIp}
                 currentProvider={currentProvider}
+                currentProfile={currentProfile}
+                canRotateProfile={canRotateProfile}
+                profileRotationPending={profileRotationPending}
+                profileRotationMessage={profileRotationMessage}
+                onRotateProfile={onRotateProfile}
               />
             ) : active.id === "wiedergabe" ? (
               <WiedergabePanel audio={audio} />
@@ -6307,6 +6350,10 @@ function AppInner() {
   const [currentHostIp, setCurrentHostIp] = useState("");
   const [currentVpnIp, setCurrentVpnIp] = useState("");
   const [currentProvider, setCurrentProvider] = useState("");
+  const [currentProfile, setCurrentProfile] = useState("");
+  const [profileRotationPending, setProfileRotationPending] = useState(false);
+  const profileRotationPendingRef = useRef(false);
+  const [profileRotationMessage, setProfileRotationMessage] = useState<string | null>(null);
   const [optionsDialogOpen, setOptionsDialogOpen] = useState(false);
   const [optionsSection, setOptionsSection] = useState<string>(OPTIONS_SECTIONS[0].id);
   const socketRef = useRef<WebSocket | DemoSocket | null>(null);
@@ -6904,6 +6951,12 @@ function AppInner() {
           setCurrentHostIp(typeof data.hostIp === "string" ? data.hostIp : "Unknown");
           setCurrentVpnIp(typeof data.vpnIp === "string" ? data.vpnIp : "Unknown");
           setCurrentProvider(typeof data.provider === "string" ? data.provider : "Unknown");
+          setCurrentProfile(typeof data.profile === "string" ? data.profile : "");
+          if (profileRotationPendingRef.current) {
+            profileRotationPendingRef.current = false;
+            setProfileRotationPending(false);
+            setProfileRotationMessage("VPN profile rotation complete.");
+          }
           break;
 	case "hwidUsed":
 		setCurrentHwid(data.hwid);
@@ -7087,7 +7140,26 @@ function AppInner() {
           }));
           break;
         }
+        case "profileRotationStarting":
+          profileRotationPendingRef.current = true;
+          setProfileRotationPending(true);
+          setProfileRotationMessage(`Rotating ${data.provider === "nordvpn" ? "NordVPN" : "ProtonVPN"} profile. WebSpeak3 will restart and reconnect.`);
+          break;
+        case "profileRotationAccepted":
+          profileRotationPendingRef.current = true;
+          setProfileRotationPending(true);
+          break;
+        case "profileRotationError":
+          profileRotationPendingRef.current = false;
+          setProfileRotationPending(false);
+          setProfileRotationMessage(typeof data.message === "string" ? data.message : "VPN profile rotation failed.");
+          break;
         case "error":
+          if (profileRotationPendingRef.current) {
+            profileRotationPendingRef.current = false;
+            setProfileRotationPending(false);
+            setProfileRotationMessage(typeof data.message === "string" ? data.message : "VPN profile rotation failed.");
+          }
           logClient("error", "Connection", data.message);
           if (hasConnectedRef.current) {
             appendLog({ text: data.message, kind: "error" });
@@ -10024,7 +10096,30 @@ function AppInner() {
           currentIp={currentIp}
           currentHostIp={currentHostIp}
           currentVpnIp={currentVpnIp}
-          currentProvider={currentProvider} />
+          currentProvider={currentProvider}
+          currentProfile={currentProfile}
+          canRotateProfile={
+            !DEMO_MODE
+            && (connectionStyle === "nordvpn" || connectionStyle === "protonvpn")
+            && socketRef.current?.readyState === WebSocket.OPEN
+          }
+          profileRotationPending={profileRotationPending}
+          profileRotationMessage={profileRotationMessage}
+          onRotateProfile={() => {
+            if (connectionStyle !== "nordvpn" && connectionStyle !== "protonvpn") {
+              setProfileRotationMessage("Select NordVPN or ProtonVPN to rotate a VPN profile.");
+              return;
+            }
+            const socket = socketRef.current;
+            if (!socket || socket.readyState !== WebSocket.OPEN || DEMO_MODE) {
+              setProfileRotationMessage("Connect to a TeamSpeak server before rotating a VPN profile.");
+              return;
+            }
+            profileRotationPendingRef.current = true;
+            setProfileRotationPending(true);
+            setProfileRotationMessage(`Preparing ${connectionStyle === "nordvpn" ? "NordVPN" : "ProtonVPN"} profile rotation…`);
+            socket.send(JSON.stringify({ type: "rotateProfile", provider: connectionStyle }));
+          }} />
       )}
 
       {connectError && (

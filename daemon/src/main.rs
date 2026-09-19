@@ -24,8 +24,13 @@ const COMPOSE_FILE: &str = "docker-compose.yml";
 const OVERRIDE_FILE: &str = "docker-compose.override.yml";
 const VPN_CONTAINER: &str = "vpn_gateway";
 const RUNTIME_DIR: &str = "/run/webspeak3";
-const PROFILE_OVERLAY_FILE: &str = "/run/webspeak3/profile-selection.override.yml";
+const RUNTIME_PROFILE_OVERLAY_FILE: &str = "/run/webspeak3/profile-selection.override.yml";
+const STATE_DIR: &str = "/var/lib/webspeak3";
 const ROTATION_STATE_FILE: &str = "/var/lib/webspeak3/profile-rotation-state.json";
+// Provider-specific overlays contain selection metadata only (a hostname or a
+// read-only source-profile path), never WireGuard key material. Keeping them
+// separate prevents a prior VPN profile from being applied in Direct mode or
+// to the other provider during a later build-all.sh recreation.
 const MAX_PROFILE_BYTES: u64 = 128 * 1024;
 const STARTUP_DELAY: Duration = Duration::from_secs(15);
 const VERIFICATION_ATTEMPTS: u8 = 20;
@@ -229,10 +234,12 @@ fn active_profile(provider: Provider) -> Option<String> {
         return None;
     }
 
-    // Report a profile only when the saved basename still resolves to a
-    // currently validated file. This avoids displaying stale state after a
-    // profile is removed or becomes invalid and a normal provider switch
-    // falls back to the provider's static Compose configuration.
+    // Report a profile only when its saved basename still resolves to a
+    // validated file *and* that provider's persistent selection overlay
+    // exists. This keeps /status aligned with what build-all.sh can recreate.
+    if !persistent_profile_overlay_path(provider).is_file() {
+        return None;
+    }
     load_active_profile(provider)
         .ok()
         .flatten()
@@ -345,9 +352,8 @@ fn unsupported_provider_response(provider: &str) -> Json<RotationResponse> {
 // The Gateway calls POST /rotate/{provider} before each TeamSpeak connection.
 // Keep that endpoint idempotent for an already-selected provider. It never
 // advances the profile shuffle bag: only POST /rotate/{provider}/profile is a
-// manual profile rotation. A normal provider switch reuses a prior manual
-// selection when one exists, otherwise it keeps the provider's static Compose
-// configuration.
+// manual profile rotation. A provider switch reuses a verified profile when
+// available, otherwise it selects and verifies an initial profile.
 async fn rotate_to_provider(
     provider: Provider,
     force_profile_rotation: bool,
@@ -355,6 +361,11 @@ async fn rotate_to_provider(
     let active_provider = current_provider();
 
     if !force_profile_rotation && active_provider == Some(provider) {
+        // The Gateway calls this route for every TeamSpeak connection. It must
+        // never select another profile or recreate Docker when the requested
+        // provider is already active, even when no profile has been pinned yet.
+        // A null Profile then accurately means "provider default / not pinned";
+        // only the explicit /profile route changes that state.
         info!(
             "Provider {} is already active; preserving its profile.",
             provider.display_name()
@@ -401,7 +412,7 @@ async fn rotate_to_provider(
         selection.profile.basename
     );
 
-    let overlay = match write_profile_overlay(provider, &selection.profile) {
+    let overlay = match write_runtime_profile_overlay(provider, &selection.profile) {
         Ok(path) => path,
         Err(reason) => {
             error!(
@@ -439,9 +450,23 @@ async fn rotate_to_provider(
         });
     }
 
-    if let Err(reason) = save_rotation_state(&selection.proposed_state) {
+    if let Err(reason) = persist_verified_profile_selection(provider, &selection.profile) {
         // The selected profile is live and leak-free, so do not report a failed
         // network rotation. The warning makes the lost no-repeat history clear.
+        error!(
+            "Profile is active but its persistent selection could not be saved: {}",
+            reason
+        );
+        return Json(RotationResponse {
+            success: true,
+            message: format!(
+                "Switched to {} using profile {}, but could not persist profile state.",
+                provider.display_name(),
+                selection.profile.basename
+            ),
+        });
+    }
+    if let Err(reason) = save_rotation_state(&selection.proposed_state) {
         error!(
             "Profile is active but rotation state could not be saved: {}",
             reason
@@ -470,32 +495,46 @@ async fn activate_existing_provider_selection(
     provider: Provider,
     previous_provider: Option<Provider>,
 ) -> Json<RotationResponse> {
-    let profile = match load_active_profile(provider) {
-        Ok(profile) => profile,
-        Err(reason) => {
-            warn!(
-                "Could not reuse the saved {} profile; using the provider's static Compose configuration: {}",
-                provider.display_name(),
-                reason
-            );
-            None
-        }
-    };
-
-    let overlay = match profile.as_ref() {
-        Some(profile) => match write_profile_overlay(provider, profile) {
-            Ok(path) => Some(path),
+    // Provider switches must start from a known profile too. Reuse an existing
+    // verified selection, or select the first profile from that provider's
+    // no-repeat pool. Ordinary requests while a provider is already active
+    // still return above without advancing this pool.
+    let (profile, proposed_state) = match load_active_profile(provider) {
+        Ok(Some(profile)) => (profile, None),
+        Ok(None) => match choose_next_profile(provider) {
+            Ok(selection) => (selection.profile, Some(selection.proposed_state)),
             Err(reason) => {
                 return Json(RotationResponse {
                     success: false,
-                    message: format!("Could not prepare saved profile selection: {reason}"),
+                    message: format!(
+                        "Could not select a {} profile: {reason}",
+                        provider.display_name()
+                    ),
                 });
             }
         },
-        None => None,
+        Err(reason) => {
+            return Json(RotationResponse {
+                success: false,
+                message: format!(
+                    "Could not read saved {} profile state: {reason}",
+                    provider.display_name()
+                ),
+            });
+        }
     };
 
-    if let Err(reason) = recreate_stack(provider, previous_provider, overlay.as_deref()).await {
+    let overlay = match write_runtime_profile_overlay(provider, &profile) {
+        Ok(path) => path,
+        Err(reason) => {
+            return Json(RotationResponse {
+                success: false,
+                message: format!("Could not prepare profile selection: {reason}"),
+            });
+        }
+    };
+
+    if let Err(reason) = recreate_stack(provider, previous_provider, Some(&overlay)).await {
         error!(
             "Failed to switch to {}: {}",
             provider.display_name(),
@@ -519,20 +558,44 @@ async fn activate_existing_provider_selection(
         });
     }
 
-    let message = match profile {
-        Some(profile) => format!(
-            "Switched to {} using the existing profile {} and verified leak protection.",
+    if let Err(reason) = persist_verified_profile_selection(provider, &profile) {
+        error!(
+            "Profile is active but its persistent selection could not be saved: {}",
+            reason
+        );
+        return Json(RotationResponse {
+            success: true,
+            message: format!(
+                "Switched to {} using profile {}, but could not persist profile state.",
+                provider.display_name(),
+                profile.basename
+            ),
+        });
+    }
+    if let Some(proposed_state) = proposed_state {
+        if let Err(reason) = save_rotation_state(&proposed_state) {
+            error!(
+                "Profile is active but rotation state could not be saved: {}",
+                reason
+            );
+            return Json(RotationResponse {
+                success: true,
+                message: format!(
+                    "Switched to {} using profile {}, but could not persist rotation history.",
+                    provider.display_name(),
+                    profile.basename
+                ),
+            });
+        }
+    }
+
+    Json(RotationResponse {
+        success: true,
+        message: format!(
+            "Switched to {} using profile {} and verified leak protection.",
             provider.display_name(),
             profile.basename
         ),
-        None => format!(
-            "Switched to {} using its static Compose configuration and verified leak protection.",
-            provider.display_name()
-        ),
-    };
-    Json(RotationResponse {
-        success: true,
-        message,
     })
 }
 
@@ -1205,9 +1268,7 @@ fn save_rotation_state(state: &RotationState) -> Result<(), String> {
     let state_directory = state_path
         .parent()
         .ok_or_else(|| "rotation state has no parent directory".to_string())?;
-    fs::create_dir_all(state_directory)
-        .map_err(|error| format!("could not create rotation state directory: {error}"))?;
-    set_private_directory_mode(state_directory)?;
+    ensure_state_directory(state_directory)?;
 
     let temporary_path = state_directory.join(format!(
         ".profile-rotation-state-{}.tmp",
@@ -1223,14 +1284,10 @@ fn save_rotation_state(state: &RotationState) -> Result<(), String> {
     Ok(())
 }
 
-fn write_profile_overlay(
+fn profile_overlay_contents(
     provider: Provider,
     profile: &ValidatedProfile,
-) -> Result<PathBuf, String> {
-    fs::create_dir_all(RUNTIME_DIR)
-        .map_err(|error| format!("could not create runtime directory: {error}"))?;
-    set_private_directory_mode(StdPath::new(RUNTIME_DIR))?;
-
+) -> Result<String, String> {
     let contents = match provider {
         Provider::NordVpn => {
             let hostname = profile
@@ -1242,8 +1299,15 @@ fn write_profile_overlay(
                 yaml_double_quoted(hostname)
             )
         }
+        // A downloaded Proton profile contains a concrete WireGuard endpoint.
+        // It therefore cannot run through Gluetun's built-in `protonvpn`
+        // provider, which performs its own server selection and rejects an
+        // endpoint port supplied by the mounted profile. Switch this one
+        // runtime Compose invocation to Gluetun's documented custom WireGuard
+        // provider instead. The read-only wg0.conf supplies (and takes
+        // precedence for) the profile's WireGuard endpoint and credentials.
         Provider::ProtonVpn => format!(
-            "services:\n  vpn_gateway:\n    environment:\n      SERVER_COUNTRIES: \"\"\n    volumes:\n      - {}\n",
+            "services:\n  vpn_gateway:\n    environment:\n      VPN_SERVICE_PROVIDER: custom\n      VPN_TYPE: wireguard\n      SERVER_COUNTRIES: \"\"\n    volumes:\n      - {}\n",
             yaml_double_quoted(&format!(
                 "{}:/gluetun/wireguard/wg0.conf:ro",
                 profile.path.display()
@@ -1252,11 +1316,55 @@ fn write_profile_overlay(
         Provider::Direct => return Err("Direct mode has no VPN profile overlay".to_string()),
     };
 
-    let path = PathBuf::from(PROFILE_OVERLAY_FILE);
-    fs::write(&path, contents)
+    Ok(contents)
+}
+
+fn write_runtime_profile_overlay(
+    provider: Provider,
+    profile: &ValidatedProfile,
+) -> Result<PathBuf, String> {
+    fs::create_dir_all(RUNTIME_DIR)
+        .map_err(|error| format!("could not create runtime directory: {error}"))?;
+    set_private_directory_mode(StdPath::new(RUNTIME_DIR))?;
+
+    let path = PathBuf::from(RUNTIME_PROFILE_OVERLAY_FILE);
+    fs::write(&path, profile_overlay_contents(provider, profile)?)
         .map_err(|error| format!("could not write runtime Compose overlay: {error}"))?;
     set_private_file_mode(&path)?;
     Ok(path)
+}
+
+fn persistent_profile_overlay_path(provider: Provider) -> PathBuf {
+    StdPath::new(STATE_DIR).join(format!(
+        "profile-selection.{}.override.yml",
+        provider.compose_suffix()
+    ))
+}
+
+fn persist_verified_profile_selection(
+    provider: Provider,
+    profile: &ValidatedProfile,
+) -> Result<(), String> {
+    let state_directory = StdPath::new(STATE_DIR);
+    ensure_state_directory(state_directory)?;
+
+    let path = persistent_profile_overlay_path(provider);
+    let temporary_path = state_directory.join(format!(
+        ".profile-selection.{}.{}.tmp",
+        provider.compose_suffix(),
+        std::process::id()
+    ));
+    fs::write(
+        &temporary_path,
+        profile_overlay_contents(provider, profile)?,
+    )
+    .map_err(|error| format!("could not write temporary persistent profile overlay: {error}"))?;
+    // The overlay has no credentials; build-all.sh runs as the normal project
+    // user and needs to read it when recreating a verified active profile.
+    set_public_readonly_file_mode(&temporary_path)?;
+    fs::rename(&temporary_path, &path)
+        .map_err(|error| format!("could not atomically save profile overlay: {error}"))?;
+    Ok(())
 }
 
 fn yaml_double_quoted(value: &str) -> String {
@@ -1274,6 +1382,15 @@ fn yaml_double_quoted(value: &str) -> String {
     format!("\"{escaped}\"")
 }
 
+fn ensure_state_directory(path: &StdPath) -> Result<(), String> {
+    fs::create_dir_all(path)
+        .map_err(|error| format!("could not create profile state directory: {error}"))?;
+    // Rotation state itself is mode 0600. The directory is readable so the
+    // non-root build-all.sh can include its non-secret persistent overlay.
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755))
+        .map_err(|error| format!("could not set profile state directory permissions: {error}"))
+}
+
 fn set_private_directory_mode(path: &StdPath) -> Result<(), String> {
     fs::set_permissions(path, fs::Permissions::from_mode(0o700))
         .map_err(|error| format!("could not protect directory permissions: {error}"))
@@ -1282,6 +1399,11 @@ fn set_private_directory_mode(path: &StdPath) -> Result<(), String> {
 fn set_private_file_mode(path: &StdPath) -> Result<(), String> {
     fs::set_permissions(path, fs::Permissions::from_mode(0o600))
         .map_err(|error| format!("could not protect file permissions: {error}"))
+}
+
+fn set_public_readonly_file_mode(path: &StdPath) -> Result<(), String> {
+    fs::set_permissions(path, fs::Permissions::from_mode(0o644))
+        .map_err(|error| format!("could not set persistent overlay permissions: {error}"))
 }
 
 #[tokio::main]

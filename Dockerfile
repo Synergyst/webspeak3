@@ -1,28 +1,34 @@
+# syntax=docker/dockerfile:1.7
+
 # --- Rust connector -----------------------------------------------------
+# The connector uses repository-owned path dependencies under tsclientlib/, so
+# cargo-chef cannot cook a recipe without those source paths. BuildKit cache
+# mounts solve that safely: Cargo's registry/git/target caches survive builds,
+# while every build explicitly removes all WebSpeak3-owned crate artifacts.
+# Thus common crates are reused but connector/ and tsclientlib/ always compile
+# from the source copied into the current build context.
 FROM rust:1-bookworm AS connector-builder
-RUN apt-get update && apt-get install -y --no-install-recommends cmake && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends cmake \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY tsclientlib/ tsclientlib/
-
-# CURRENT VERSION (Slow)
 COPY connector/ connector/
 WORKDIR /src/connector
 ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
-RUN cargo build --release
-
-# OPTIMIZED VERSION (Fast)
-# 1. Copy only the dependency manifests
-#COPY connector/Cargo.toml connector/Cargo.lock ./connector/
-# 2. Create a dummy source file to trigger the dependency build
-#RUN mkdir -p connector/src && echo "fn main() {}" > connector/src/main.rs
-# 3. Build the dependencies (this layer will now stay cached!)
-#WORKDIR /src/connector
-#RUN cargo build --release
-# 4. Now copy the REAL source code
-#COPY connector/ connector/
-# 5. Build the actual app (this will now take seconds, not minutes)
-#ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
-#RUN cargo build --release
+RUN --mount=type=cache,id=webspeak3-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=webspeak3-cargo-git,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,id=webspeak3-connector-target,target=/src/connector/target,sharing=locked \
+    cargo build --release \
+    && mkdir -p /out \
+    && cp target/release/ts-connector /out/ts-connector \
+    && cargo clean -p ts-connector \
+    && cargo clean -p tsclientlib \
+    && cargo clean -p tsproto \
+    && cargo clean -p ts-bookkeeping \
+    && cargo clean -p tsproto-packets \
+    && cargo clean -p tsproto-structs \
+    && cargo clean -p tsproto-types
 
 # --- Web frontend ---------------------------------------------------------
 FROM node:22-bookworm-slim AS web-builder
@@ -74,7 +80,7 @@ RUN npm ci --omit=dev \
     && rm -rf /root/.npm /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=gateway-builder /src/gateway/dist ./dist
-COPY --from=connector-builder /src/connector/target/release/ts-connector /app/connector-bin/ts-connector
+COPY --from=connector-builder /out/ts-connector /app/connector-bin/ts-connector
 COPY --from=web-builder /src/web/dist /app/web/dist
 
 ENV PORT=8080

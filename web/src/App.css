@@ -3274,6 +3274,46 @@
   margin: 0.35rem 0 0;
 }
 
+.ts-options-network-status {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  background: var(--input-bg);
+  font-size: 12px;
+}
+
+.ts-options-profile-rotation {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ts-options-profile-rotation button {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: linear-gradient(to bottom, var(--button-bg-1), var(--button-bg-2));
+  color: var(--text);
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ts-options-profile-rotation button:hover:not(:disabled) {
+  background: linear-gradient(to bottom, var(--button-bg-hover-1), var(--button-bg-hover-2));
+}
+
+.ts-options-profile-rotation button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .ts-design-theme-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
