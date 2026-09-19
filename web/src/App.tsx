@@ -152,7 +152,7 @@ function loadServerType(): ServerType {
 
 function loadConnectionStyle(): string {
   const raw = localStorage.getItem(CONNECTION_STYLE_KEY);
-  return (raw === "direct" || raw === "protonvpn" || raw === "nordvpn") ? raw : "direct";
+  return (raw === "direct" || raw === "protonvpn" || raw === "nordvpn") ? raw : "protonvpn";
 }
 
 /** Everything needed to (re)open a gateway connection for one session, kept
@@ -6298,8 +6298,8 @@ function AppInner() {
     const entry: ClientLogEntry = { id: ++logIdRef.current, timestamp: Date.now(), category, level, message };
     setLogEntries((prev) => [...prev.slice(-(MAX_LOG_ENTRIES - 1)), entry]);
   };
-  const [regenerateIdentity, setRegenerateIdentity] = useState(() => loadBoolPref(REGENERATE_IDENTITY_KEY, false));
-  const [randomizeHardwareId, setRandomizeHardwareId] = useState(() => loadBoolPref(RANDOM_HARDWARE_ID_KEY, false));
+  const [regenerateIdentity, setRegenerateIdentity] = useState(() => loadBoolPref(REGENERATE_IDENTITY_KEY, true));
+  const [randomizeHardwareId, setRandomizeHardwareId] = useState(() => loadBoolPref(RANDOM_HARDWARE_ID_KEY, true));
   const [connectionStyle, setConnectionStyle] = useState(() => loadConnectionStyle());
   const [currentUid, setCurrentUid] = useState("");
   const [currentHwid, setCurrentHwid] = useState("");
