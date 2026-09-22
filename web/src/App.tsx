@@ -6057,7 +6057,7 @@ function AppInner() {
   const [host, setHost] = useState(
     () =>
       localStorage.getItem(LAST_HOST_KEY) ??
-      (DEMO_MODE ? DEMO_HOST : loadDesignTheme() === "nova" ? "" : "localhost")
+      (DEMO_MODE ? DEMO_HOST : loadDesignTheme() === "nova" ? "" : "host.docker.internal")
   );
   const [nickname, setNickname] = useState(
     () => localStorage.getItem(LAST_NICKNAME_KEY) ?? (DEMO_MODE ? "Guest" : "")
@@ -9002,7 +9002,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🟢</span>
                 <span className="ts-menu-item-label">{t("menu.connections.connect")}</span>
-                <span className="ts-menu-item-shortcut">Strg+S</span>
+                <span className="ts-menu-item-shortcut">Ctrl+S</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9014,7 +9014,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🔴</span>
                 <span className="ts-menu-item-label">{t("menu.connections.disconnectCurrent")}</span>
-                <span className="ts-menu-item-shortcut">Strg+D</span>
+                <span className="ts-menu-item-shortcut">Ctrl+D</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9042,7 +9042,7 @@ function AppInner() {
               <button className="ts-menu-item" onClick={openAddFavorite}>
                 <span className="ts-menu-item-icon">⭐</span>
                 <span className="ts-menu-item-label">{t("menu.favorites.add")}</span>
-                <span className="ts-menu-item-shortcut">Strg+B</span>
+                <span className="ts-menu-item-shortcut">Ctrl+B</span>
               </button>
               <button className="ts-menu-item" onClick={openManageFavorites}>
                 <span className="ts-menu-item-icon">🗂️</span>
@@ -9256,7 +9256,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🪪</span>
                 <span className="ts-menu-item-label">{t("menu.extras.identities")}</span>
-                <span className="ts-menu-item-shortcut">Strg+I</span>
+                <span className="ts-menu-item-shortcut">Ctrl+I</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9267,7 +9267,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">📇</span>
                 <span className="ts-menu-item-label">{t("menu.extras.contacts")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+O</span>
+                <span className="ts-menu-item-shortcut">Ctrl+Shift+O</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9278,7 +9278,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🔗</span>
                 <span className="ts-menu-item-label">{t("menu.extras.collectedUrls")}</span>
-                <span className="ts-menu-item-shortcut">Strg+U</span>
+                <span className="ts-menu-item-shortcut">Ctrl+U</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9301,7 +9301,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🗒️</span>
                 <span className="ts-menu-item-label">{t("menu.extras.whisperLists")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+W</span>
+                <span className="ts-menu-item-shortcut">Ctrl+Shift+W</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9312,7 +9312,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🕓</span>
                 <span className="ts-menu-item-label">{t("menu.extras.whisperHistory")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+H</span>
+                <span className="ts-menu-item-shortcut">Ctrl+Shift+H</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9323,7 +9323,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">📜</span>
                 <span className="ts-menu-item-label">{t("menu.extras.clientLog")}</span>
-                <span className="ts-menu-item-shortcut">Strg+L</span>
+                <span className="ts-menu-item-shortcut">Ctrl+L</span>
               </button>
               <div className="ts-menu-separator" />
               <button
@@ -9335,7 +9335,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🚫</span>
                 <span className="ts-menu-item-label">{t("menu.extras.banList")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+B</span>
+                <span className="ts-menu-item-shortcut">Ctrl+Shift+B</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9346,7 +9346,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">⚠️</span>
                 <span className="ts-menu-item-label">{t("menu.extras.complaintList")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+C</span>
+                <span className="ts-menu-item-shortcut">Ctrl+Shift+C</span>
               </button>
               <button
                 className="ts-menu-item"
@@ -9379,7 +9379,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">📄</span>
                 <span className="ts-menu-item-label">{t("menu.extras.serverLog")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+L</span>
+                <span className="ts-menu-item-shortcut">Ctrl+Shift+L</span>
               </button>
               <div className="ts-menu-separator" />
               <button
@@ -9392,7 +9392,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">🔴</span>
                 <span className="ts-menu-item-label">{t("menu.extras.startRecording")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+R</span>
+                <span className="ts-menu-item-shortcut">Ctrl+Shift+R</span>
               </button>
               <button className="ts-menu-item" disabled>
                 <span className="ts-menu-item-icon">🔴</span>
@@ -9408,7 +9408,7 @@ function AppInner() {
               >
                 <span className="ts-menu-item-icon">⏹️</span>
                 <span className="ts-menu-item-label">{t("menu.extras.stopRecording")}</span>
-                <span className="ts-menu-item-shortcut">Strg+Umschalt+T</span>
+                <span className="ts-menu-item-shortcut">Ctrl+Shift+T</span>
               </button>
               <div className="ts-menu-separator" />
               <button
